@@ -56,7 +56,6 @@ import KeyAndBalance from "../KeyAndBalance";
 import SmartAddress from "../SmartAddress";
 import { SolanaCreateAssociatedAddressAlternate } from "../SolanaCreateAssociatedAddress";
 import StepDescription from "../StepDescription";
-import TerraFeeDenomPicker from "../TerraFeeDenomPicker";
 import AddToMetamask from "./AddToMetamask";
 import RedeemPreview from "./RedeemPreview";
 import WaitingForWalletMessage from "./WaitingForWalletMessage";
@@ -233,9 +232,6 @@ function Redeem() {
   const nonRelayContent = (
     <>
       <KeyAndBalance chainId={targetChain} />
-      {isTerraChain(targetChain) && (
-        <TerraFeeDenomPicker disabled={disabled} chainId={targetChain} />
-      )}
       {isNativeEligible && (
         <FormControlLabel
           control={

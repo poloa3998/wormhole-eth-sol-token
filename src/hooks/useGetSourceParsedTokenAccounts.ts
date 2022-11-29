@@ -1,26 +1,11 @@
 import {
   ChainId,
-  CHAIN_ID_ACALA,
-  CHAIN_ID_ALGORAND,
-  CHAIN_ID_APTOS,
-  CHAIN_ID_AURORA,
-  CHAIN_ID_AVAX,
   CHAIN_ID_BSC,
-  CHAIN_ID_CELO,
   CHAIN_ID_ETH,
-  CHAIN_ID_FANTOM,
-  CHAIN_ID_INJECTIVE,
-  CHAIN_ID_KARURA,
   CHAIN_ID_KLAYTN,
-  CHAIN_ID_NEAR,
-  CHAIN_ID_NEON,
-  CHAIN_ID_OASIS,
-  CHAIN_ID_POLYGON,
   CHAIN_ID_SOLANA,
-  CHAIN_ID_XPLA,
   ethers_contracts,
   isEVMChain,
-  isTerraChain,
   WSOL_ADDRESS,
   WSOL_DECIMALS,
 } from "@certusone/wormhole-sdk";
@@ -32,18 +17,15 @@ import {
   ParsedAccountData,
   PublicKey,
 } from "@solana/web3.js";
-import { Algodv2 } from "algosdk";
 import axios from "axios";
 import { ethers } from "ethers";
 import { formatUnits } from "ethers/lib/utils";
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { useDispatch, useSelector } from "react-redux";
-import { useAlgorandContext } from "../contexts/AlgorandWalletContext";
 import {
   Provider,
   useEthereumProvider,
 } from "../contexts/EthereumProviderContext";
-import { useNearContext } from "../contexts/NearWalletContext";
 import { useSolanaWallet } from "../contexts/SolanaWalletContext";
 import acalaIcon from "../icons/acala.svg";
 import auroraIcon from "../icons/aurora.svg";
@@ -87,14 +69,8 @@ import {
 import {
   ACA_ADDRESS,
   ACA_DECIMALS,
-  ALGORAND_HOST,
-  ALGO_DECIMALS,
-  COVALENT_GET_TOKENS_URL,
-  BLOCKSCOUT_GET_TOKENS_URL,
   KAR_ADDRESS,
   KAR_DECIMALS,
-  NATIVE_NEAR_DECIMALS,
-  NATIVE_NEAR_PLACEHOLDER,
   SOLANA_HOST,
   WAVAX_ADDRESS,
   WAVAX_DECIMALS,
@@ -118,13 +94,11 @@ import {
   WROSE_DECIMALS,
   getDefaultNativeCurrencyAddressEvm,
 } from "../utils/consts";
-import { makeNearAccount } from "../utils/near";
 import {
   ExtractedMintInfo,
   extractMintInfo,
   getMultipleAccountsRPC,
 } from "../utils/solana";
-import { fetchSingleMetadata } from "./useAlgoMetadata";
 
 export function createParsedTokenAccount(
   publicKey: string,
@@ -731,114 +705,6 @@ const getSolanaParsedTokenAccounts = async (
   }
 };
 
-const getAlgorandParsedTokenAccounts = async (
-  walletAddress: string,
-  dispatch: Dispatch,
-  nft: boolean
-) => {
-  dispatch(
-    nft ? fetchSourceParsedTokenAccountsNFT() : fetchSourceParsedTokenAccounts()
-  );
-  try {
-    const algodClient = new Algodv2(
-      ALGORAND_HOST.algodToken,
-      ALGORAND_HOST.algodServer,
-      ALGORAND_HOST.algodPort
-    );
-    const accountInfo = await algodClient
-      .accountInformation(walletAddress)
-      .do();
-    const parsedTokenAccounts: ParsedTokenAccount[] = [];
-    for (const asset of accountInfo.assets) {
-      const assetId = asset["asset-id"];
-      const amount = asset.amount;
-      const metadata = await fetchSingleMetadata(assetId, algodClient);
-      const isNFT: boolean = amount === 1 && metadata.decimals === 0;
-      if (((nft && isNFT) || (!nft && !isNFT)) && amount > 0) {
-        parsedTokenAccounts.push(
-          createParsedTokenAccount(
-            walletAddress,
-            assetId.toString(),
-            amount,
-            metadata.decimals,
-            parseFloat(formatUnits(amount, metadata.decimals)),
-            formatUnits(amount, metadata.decimals).toString(),
-            metadata.symbol,
-            metadata.tokenName,
-            undefined,
-            false
-          )
-        );
-      }
-    }
-    if (nft) {
-      dispatch(receiveSourceParsedTokenAccountsNFT(parsedTokenAccounts));
-      return;
-    }
-    // The ALGOs account is prepended for the non NFT case
-    parsedTokenAccounts.unshift(
-      createParsedTokenAccount(
-        walletAddress, //publicKey
-        "0", //asset ID
-        accountInfo.amount, //amount
-        ALGO_DECIMALS,
-        parseFloat(formatUnits(accountInfo.amount, ALGO_DECIMALS)),
-        formatUnits(accountInfo.amount, ALGO_DECIMALS).toString(),
-        "ALGO",
-        "Algo",
-        undefined, //TODO logo
-        true
-      )
-    );
-    dispatch(receiveSourceParsedTokenAccounts(parsedTokenAccounts));
-  } catch (e) {
-    console.error(e);
-    dispatch(
-      nft
-        ? errorSourceParsedTokenAccountsNFT("Failed to load NFT metadata")
-        : errorSourceParsedTokenAccounts("Failed to load token metadata.")
-    );
-  }
-};
-
-const getNearParsedTokenAccounts = async (
-  walletAddress: string,
-  dispatch: Dispatch,
-  nft: boolean
-) => {
-  dispatch(
-    nft ? fetchSourceParsedTokenAccountsNFT() : fetchSourceParsedTokenAccounts()
-  );
-  try {
-    if (nft) {
-      dispatch(receiveSourceParsedTokenAccountsNFT([]));
-      return;
-    }
-    const account = await makeNearAccount(walletAddress);
-    const balance = await account.getAccountBalance();
-    const nativeNear = createParsedTokenAccount(
-      walletAddress, //publicKey
-      NATIVE_NEAR_PLACEHOLDER, //the app doesn't like when this isn't truthy
-      balance.available, //amount
-      NATIVE_NEAR_DECIMALS,
-      parseFloat(formatUnits(balance.available, NATIVE_NEAR_DECIMALS)),
-      formatUnits(balance.available, NATIVE_NEAR_DECIMALS).toString(),
-      "NEAR",
-      "Near",
-      undefined, //TODO logo
-      true
-    );
-    dispatch(receiveSourceParsedTokenAccounts([nativeNear]));
-  } catch (e) {
-    console.error(e);
-    dispatch(
-      nft
-        ? errorSourceParsedTokenAccountsNFT("Failed to load NFT metadata")
-        : errorSourceParsedTokenAccounts("Failed to load token metadata.")
-    );
-  }
-};
-
 /**
  * Fetches the balance of an asset for the connected wallet
  * This should handle every type of chain in the future, but only reads the Transfer state.
@@ -858,8 +724,6 @@ function useGetAvailableTokens(nft: boolean = false) {
   const solanaWallet = useSolanaWallet();
   const solPK = solanaWallet?.publicKey;
   const { provider, signerAddress } = useEthereumProvider();
-  const { accounts: algoAccounts } = useAlgorandContext();
-  const { accountId: nearAccountId } = useNearContext();
 
   const [covalent, setCovalent] = useState<any>(undefined);
   const [covalentLoading, setCovalentLoading] = useState(false);
@@ -889,10 +753,6 @@ function useGetAvailableTokens(nft: boolean = false) {
     ? signerAddress
     : lookupChain === CHAIN_ID_SOLANA
     ? solPK?.toString()
-    : lookupChain === CHAIN_ID_ALGORAND
-    ? algoAccounts[0]?.address
-    : lookupChain === CHAIN_ID_NEAR
-    ? nearAccountId || undefined
     : undefined;
 
   const resetSourceAccounts = useCallback(() => {
@@ -1074,240 +934,6 @@ function useGetAvailableTokens(nft: boolean = false) {
     };
   }, [lookupChain, provider, signerAddress, nft, ethNativeAccount]);
 
-  //Polygon native asset load
-  useEffect(() => {
-    let cancelled = false;
-    if (
-      signerAddress &&
-      lookupChain === CHAIN_ID_POLYGON &&
-      !ethNativeAccount &&
-      !nft
-    ) {
-      setEthNativeAccountLoading(true);
-      createNativePolygonParsedTokenAccount(provider, signerAddress).then(
-        (result) => {
-          console.log("create native account returned with value", result);
-          if (!cancelled) {
-            setEthNativeAccount(result);
-            setEthNativeAccountLoading(false);
-            setEthNativeAccountError("");
-          }
-        },
-        (error) => {
-          if (!cancelled) {
-            setEthNativeAccount(undefined);
-            setEthNativeAccountLoading(false);
-            setEthNativeAccountError("Unable to retrieve your MATIC balance.");
-          }
-        }
-      );
-    }
-
-    return () => {
-      cancelled = true;
-    };
-  }, [lookupChain, provider, signerAddress, nft, ethNativeAccount]);
-
-  //TODO refactor all these into an isEVM effect
-  //avax native asset load
-  useEffect(() => {
-    let cancelled = false;
-    if (
-      signerAddress &&
-      lookupChain === CHAIN_ID_AVAX &&
-      !ethNativeAccount &&
-      !nft
-    ) {
-      setEthNativeAccountLoading(true);
-      createNativeAvaxParsedTokenAccount(provider, signerAddress).then(
-        (result) => {
-          console.log("create native account returned with value", result);
-          if (!cancelled) {
-            setEthNativeAccount(result);
-            setEthNativeAccountLoading(false);
-            setEthNativeAccountError("");
-          }
-        },
-        (error) => {
-          if (!cancelled) {
-            setEthNativeAccount(undefined);
-            setEthNativeAccountLoading(false);
-            setEthNativeAccountError("Unable to retrieve your AVAX balance.");
-          }
-        }
-      );
-    }
-
-    return () => {
-      cancelled = true;
-    };
-  }, [lookupChain, provider, signerAddress, nft, ethNativeAccount]);
-
-  useEffect(() => {
-    let cancelled = false;
-    if (
-      signerAddress &&
-      lookupChain === CHAIN_ID_OASIS &&
-      !ethNativeAccount &&
-      !nft
-    ) {
-      setEthNativeAccountLoading(true);
-      createNativeOasisParsedTokenAccount(provider, signerAddress).then(
-        (result) => {
-          console.log("create native account returned with value", result);
-          if (!cancelled) {
-            setEthNativeAccount(result);
-            setEthNativeAccountLoading(false);
-            setEthNativeAccountError("");
-          }
-        },
-        (error) => {
-          if (!cancelled) {
-            setEthNativeAccount(undefined);
-            setEthNativeAccountLoading(false);
-            setEthNativeAccountError("Unable to retrieve your Oasis balance.");
-          }
-        }
-      );
-    }
-
-    return () => {
-      cancelled = true;
-    };
-  }, [lookupChain, provider, signerAddress, nft, ethNativeAccount]);
-
-  useEffect(() => {
-    let cancelled = false;
-    if (
-      signerAddress &&
-      lookupChain === CHAIN_ID_AURORA &&
-      !ethNativeAccount &&
-      !nft
-    ) {
-      setEthNativeAccountLoading(true);
-      createNativeAuroraParsedTokenAccount(provider, signerAddress).then(
-        (result) => {
-          console.log("create native account returned with value", result);
-          if (!cancelled) {
-            setEthNativeAccount(result);
-            setEthNativeAccountLoading(false);
-            setEthNativeAccountError("");
-          }
-        },
-        (error) => {
-          if (!cancelled) {
-            setEthNativeAccount(undefined);
-            setEthNativeAccountLoading(false);
-            setEthNativeAccountError("Unable to retrieve your Fantom balance.");
-          }
-        }
-      );
-    }
-
-    return () => {
-      cancelled = true;
-    };
-  }, [lookupChain, provider, signerAddress, nft, ethNativeAccount]);
-
-  useEffect(() => {
-    let cancelled = false;
-    if (
-      signerAddress &&
-      lookupChain === CHAIN_ID_FANTOM &&
-      !ethNativeAccount &&
-      !nft
-    ) {
-      setEthNativeAccountLoading(true);
-      createNativeFantomParsedTokenAccount(provider, signerAddress).then(
-        (result) => {
-          console.log("create native account returned with value", result);
-          if (!cancelled) {
-            setEthNativeAccount(result);
-            setEthNativeAccountLoading(false);
-            setEthNativeAccountError("");
-          }
-        },
-        (error) => {
-          if (!cancelled) {
-            setEthNativeAccount(undefined);
-            setEthNativeAccountLoading(false);
-            setEthNativeAccountError("Unable to retrieve your Fantom balance.");
-          }
-        }
-      );
-    }
-
-    return () => {
-      cancelled = true;
-    };
-  }, [lookupChain, provider, signerAddress, nft, ethNativeAccount]);
-
-  useEffect(() => {
-    let cancelled = false;
-    if (
-      signerAddress &&
-      lookupChain === CHAIN_ID_KARURA &&
-      !ethNativeAccount &&
-      !nft
-    ) {
-      setEthNativeAccountLoading(true);
-      createNativeKaruraParsedTokenAccount(provider, signerAddress).then(
-        (result) => {
-          console.log("create native account returned with value", result);
-          if (!cancelled) {
-            setEthNativeAccount(result);
-            setEthNativeAccountLoading(false);
-            setEthNativeAccountError("");
-          }
-        },
-        (error) => {
-          if (!cancelled) {
-            setEthNativeAccount(undefined);
-            setEthNativeAccountLoading(false);
-            setEthNativeAccountError("Unable to retrieve your Karura balance.");
-          }
-        }
-      );
-    }
-
-    return () => {
-      cancelled = true;
-    };
-  }, [lookupChain, provider, signerAddress, nft, ethNativeAccount]);
-
-  useEffect(() => {
-    let cancelled = false;
-    if (
-      signerAddress &&
-      lookupChain === CHAIN_ID_ACALA &&
-      !ethNativeAccount &&
-      !nft
-    ) {
-      setEthNativeAccountLoading(true);
-      createNativeAcalaParsedTokenAccount(provider, signerAddress).then(
-        (result) => {
-          console.log("create native account returned with value", result);
-          if (!cancelled) {
-            setEthNativeAccount(result);
-            setEthNativeAccountLoading(false);
-            setEthNativeAccountError("");
-          }
-        },
-        (error) => {
-          if (!cancelled) {
-            setEthNativeAccount(undefined);
-            setEthNativeAccountLoading(false);
-            setEthNativeAccountError("Unable to retrieve your Acala balance.");
-          }
-        }
-      );
-    }
-
-    return () => {
-      cancelled = true;
-    };
-  }, [lookupChain, provider, signerAddress, nft, ethNativeAccount]);
-
   useEffect(() => {
     let cancelled = false;
     if (
@@ -1340,188 +966,6 @@ function useGetAvailableTokens(nft: boolean = false) {
       cancelled = true;
     };
   }, [lookupChain, provider, signerAddress, nft, ethNativeAccount]);
-
-  useEffect(() => {
-    let cancelled = false;
-    if (
-      signerAddress &&
-      lookupChain === CHAIN_ID_CELO &&
-      !ethNativeAccount &&
-      !nft
-    ) {
-      setEthNativeAccountLoading(true);
-      createNativeCeloParsedTokenAccount(provider, signerAddress).then(
-        (result) => {
-          console.log("create native account returned with value", result);
-          if (!cancelled) {
-            setEthNativeAccount(result);
-            setEthNativeAccountLoading(false);
-            setEthNativeAccountError("");
-          }
-        },
-        (error) => {
-          if (!cancelled) {
-            setEthNativeAccount(undefined);
-            setEthNativeAccountLoading(false);
-            setEthNativeAccountError("Unable to retrieve your Celo balance.");
-          }
-        }
-      );
-    }
-
-    return () => {
-      cancelled = true;
-    };
-  }, [lookupChain, provider, signerAddress, nft, ethNativeAccount]);
-
-  useEffect(() => {
-    let cancelled = false;
-    if (
-      signerAddress &&
-      lookupChain === CHAIN_ID_NEON &&
-      !ethNativeAccount &&
-      !nft
-    ) {
-      setEthNativeAccountLoading(true);
-      createNativeNeonParsedTokenAccount(provider, signerAddress).then(
-        (result) => {
-          console.log("create native account returned with value", result);
-          if (!cancelled) {
-            setEthNativeAccount(result);
-            setEthNativeAccountLoading(false);
-            setEthNativeAccountError("");
-          }
-        },
-        (error) => {
-          if (!cancelled) {
-            setEthNativeAccount(undefined);
-            setEthNativeAccountLoading(false);
-            setEthNativeAccountError("Unable to retrieve your Neon balance.");
-          }
-        }
-      );
-    }
-
-    return () => {
-      cancelled = true;
-    };
-  }, [lookupChain, provider, signerAddress, nft, ethNativeAccount]);
-
-  //Ethereum covalent or blockscout accounts load
-  useEffect(() => {
-    //const testWallet = "0xf60c2ea62edbfe808163751dd0d8693dcb30019c";
-    // const nftTestWallet1 = "0x3f304c6721f35ff9af00fd32650c8e0a982180ab";
-    // const nftTestWallet2 = "0x98ed231428088eb440e8edb5cc8d66dcf913b86e";
-    // const nftTestWallet3 = "0xb1fadf677a7e9b90e9d4f31c8ffb3dc18c138c6f";
-    // const nftBscTestWallet1 = "0x5f464a652bd1991df0be37979b93b3306d64a909";
-
-    let cancelled = false;
-    const walletAddress = signerAddress;
-    if (walletAddress && isEVMChain(lookupChain) && !covalent) {
-      let url = COVALENT_GET_TOKENS_URL(lookupChain, walletAddress, nft);
-      let getAccounts;
-      if (url) {
-        getAccounts = getEthereumAccountsCovalent;
-      } else {
-        url = BLOCKSCOUT_GET_TOKENS_URL(lookupChain, walletAddress);
-        getAccounts = getEthereumAccountsBlockscout;
-      }
-      if (!url) {
-        return;
-      }
-      //TODO less cancel
-      !cancelled && setCovalentLoading(true);
-      !cancelled &&
-        dispatch(
-          nft
-            ? fetchSourceParsedTokenAccountsNFT()
-            : fetchSourceParsedTokenAccounts()
-        );
-      getAccounts(url, nft, lookupChain).then(
-        (accounts) => {
-          !cancelled && setCovalentLoading(false);
-          !cancelled && setCovalentError(undefined);
-          !cancelled && setCovalent(accounts);
-          !cancelled &&
-            dispatch(
-              nft
-                ? receiveSourceParsedTokenAccountsNFT(
-                    accounts.reduce((arr, current) => {
-                      if (current.nft_data) {
-                        current.nft_data.forEach((x) =>
-                          arr.push(
-                            createNFTParsedTokenAccountFromCovalent(
-                              walletAddress,
-                              current,
-                              x
-                            )
-                          )
-                        );
-                      }
-                      return arr;
-                    }, [] as NFTParsedTokenAccount[])
-                  )
-                : receiveSourceParsedTokenAccounts(
-                    accounts.map((x) =>
-                      createParsedTokenAccountFromCovalent(walletAddress, x)
-                    )
-                  )
-            );
-        },
-        () => {
-          !cancelled &&
-            dispatch(
-              nft
-                ? errorSourceParsedTokenAccountsNFT(
-                    "Cannot load your Ethereum NFTs at the moment."
-                  )
-                : errorSourceParsedTokenAccounts(
-                    "Cannot load your Ethereum tokens at the moment."
-                  )
-            );
-          !cancelled &&
-            setCovalentError("Cannot load your Ethereum tokens at the moment.");
-          !cancelled && setCovalentLoading(false);
-        }
-      );
-
-      return () => {
-        cancelled = true;
-      };
-    }
-  }, [lookupChain, provider, signerAddress, dispatch, nft, covalent]);
-
-  //Terra accounts load
-  //At present, we don't have any mechanism for doing this.
-  useEffect(() => {}, []);
-  //Algorand accounts load
-  useEffect(() => {
-    if (lookupChain === CHAIN_ID_ALGORAND && currentSourceWalletAddress) {
-      if (
-        !(tokenAccounts.data || tokenAccounts.isFetching || tokenAccounts.error)
-      ) {
-        getAlgorandParsedTokenAccounts(
-          currentSourceWalletAddress,
-          dispatch,
-          nft
-        );
-      }
-    }
-
-    return () => {};
-  }, [dispatch, lookupChain, currentSourceWalletAddress, tokenAccounts, nft]);
-  //Near accounts load
-  useEffect(() => {
-    if (lookupChain === CHAIN_ID_NEAR && currentSourceWalletAddress) {
-      if (
-        !(tokenAccounts.data || tokenAccounts.isFetching || tokenAccounts.error)
-      ) {
-        getNearParsedTokenAccounts(currentSourceWalletAddress, dispatch, nft);
-      }
-    }
-
-    return () => {};
-  }, [dispatch, lookupChain, currentSourceWalletAddress, tokenAccounts, nft]);
 
   const ethAccounts = useMemo(() => {
     const output = { ...tokenAccounts };
@@ -1557,32 +1001,6 @@ function useGetAvailableTokens(nft: boolean = false) {
           error: covalentError,
           receivedAt: null, //TODO
         },
-        resetAccounts: resetSourceAccounts,
-      }
-    : isTerraChain(lookupChain)
-    ? {
-        resetAccounts: resetSourceAccounts,
-      }
-    : lookupChain === CHAIN_ID_XPLA
-    ? {
-        resetAccounts: resetSourceAccounts,
-      }
-    : lookupChain === CHAIN_ID_APTOS
-    ? {
-        resetAccounts: resetSourceAccounts,
-      }
-    : lookupChain === CHAIN_ID_ALGORAND
-    ? {
-        tokenAccounts,
-        resetAccounts: resetSourceAccounts,
-      }
-    : lookupChain === CHAIN_ID_INJECTIVE
-    ? {
-        resetAccounts: resetSourceAccounts,
-      }
-    : lookupChain === CHAIN_ID_NEAR
-    ? {
-        tokenAccounts,
         resetAccounts: resetSourceAccounts,
       }
     : undefined;

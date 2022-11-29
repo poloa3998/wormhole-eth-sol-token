@@ -21,7 +21,6 @@ import { useSelector } from "react-redux";
 import { NFTParsedTokenAccount } from "../../store/nftSlice";
 import { selectTransferTargetChain } from "../../store/selectors";
 import { balancePretty } from "../../utils/balancePretty";
-import { getIsTokenTransferDisabled } from "../../utils/consts";
 import { shortenAddress } from "../../utils/solana";
 import NFTViewer from "./NFTViewer";
 
@@ -436,11 +435,6 @@ export default function TokenPicker({
                   key={
                     option.publicKey + option.mintKey + (option.tokenId || "")
                   }
-                  disabled={getIsTokenTransferDisabled(
-                    chainId,
-                    targetChain,
-                    option.mintKey
-                  )}
                 >
                   <RenderOption account={option} />
                 </ListItem>

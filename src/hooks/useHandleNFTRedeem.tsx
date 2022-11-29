@@ -31,9 +31,7 @@ import { useSolanaWallet } from "../contexts/SolanaWalletContext";
 import { setIsRedeeming, setRedeemTx } from "../store/nftSlice";
 import { selectNFTIsRedeeming, selectNFTTargetChain } from "../store/selectors";
 import {
-  ACALA_HOST,
   getNFTBridgeAddressForChain,
-  KARURA_HOST,
   MAX_VAA_UPLOAD_RETRIES_SOLANA,
   SOLANA_HOST,
   SOL_BRIDGE_ADDRESS,
@@ -56,12 +54,7 @@ async function evm(
   try {
     const overrides =
       // Karura and Acala need gas params for NFT minting
-      chainId === CHAIN_ID_KARURA
-        ? await getKaruraGasParams(KARURA_HOST)
-        : chainId === CHAIN_ID_ACALA
-        ? await getKaruraGasParams(ACALA_HOST)
-        : // Klaytn requires specifying gasPrice
-        chainId === CHAIN_ID_KLAYTN
+      chainId === CHAIN_ID_KLAYTN
         ? { gasPrice: (await signer.getGasPrice()).toString() }
         : {};
     const receipt = await redeemOnEth(
